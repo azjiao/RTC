@@ -10,9 +10,6 @@
 #include <stdio.h>
 #include "template.h"
 #include "dev.h"
-#include "modRTU.h"
-#include "modMaster.h"
-#include "modSlave.h"
 #include "rtc.h"
 
 void assert_failed(uint8_t* file, uint32_t line)
@@ -28,27 +25,25 @@ int main(void)
     NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
     led_Init();
     key_Init();
-    delay_Init(); //采用查询方式延时，应在文件delay.c中注释掉#define APP1MSPLUS宏定义。
+    delay_Init(); 
     RTC_Init();  //RTC初始化.
     Usart1_Init(19200);
-    //Modbus通讯初始化.
-    Modbus_Init();
     Iwdg_Init(4, 625);  //独立看门狗初始化：预分频系数4对应64，RLR值为625，这样看门狗定时1s。
-
-    ReceiveFrame(&RX_Struct);
 
     while(1)
     {
-        Modbus_Slave();
-        if(Modbus_Status_Struct.bBusy){
+        delay_ms(500);
+        {
             LED1_OFF;
             LED0_ON;
         }
-        else{
+        Iwdg_Feed();
+        delay_ms(500);
+        {
             LED0_OFF;
             LED1_ON;
         }
-       Iwdg_Feed();
+        Iwdg_Feed();
     }
 
 }
