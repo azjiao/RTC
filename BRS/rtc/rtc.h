@@ -28,12 +28,25 @@ bool Is_LeapYear(uint16_t u16Year);
 //日期时间转换为日历时间(秒数)
 //锚点是1970-1-1-0:0:0
 //不作时区转换，一律是本地时间。
+//函数不改变dt内容。
 uint32_t Dt2Sec(dtStruct *dt);
 
 //日历时间(秒数)转换为日期时间
 //锚点是1970-1-1-0:0:0
 //不作时区转换，一律看作本地时间。
+//转换后的日期时间存入dt。
 void Sec2Dt(uint32_t u32Sec, dtStruct* dt);
+
+//设置RTC时间
+//调用Dt2Sec()把日期时间转换为日历时间，然后写入RTC的CNT。
+//函数内对dt内容进行判断，需要1900-1-1至2105-12-31之间的日期。
+//写入正确返回0，否则返回非零错误码。
+//函数不改变dt内容。
+bool Set_RTC(dtStruct *dt);
+
+//设置RTC的闹钟时间。
+//基本用法同Set_RTC()，只不过写入的寄存器不同。
+bool Set_Alarm(dtStruct *dt);
 
 
 //RTC初始化.

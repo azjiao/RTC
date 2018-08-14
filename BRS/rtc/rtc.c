@@ -30,7 +30,9 @@ bool RTC_Init(void)
     PWR_BackupAccessCmd(ENABLE);
 
     //监测是否是第一次配置RTC，如果是则进行配置。
-    if(BKP_ReadBackupRegister(BKP_DR1) != 0x5050)
+    //主要配置LES使用晶振还是外部时钟源、RTC时钟选择LSE还是LSI。
+    //以及RTC的预分频值。
+    if(BKP_ReadBackupRegister(BKP_DR1) != 0x5051)
     {
         //根据需要决定是否复位后备寄存器区域
         BKP_DeInit();
@@ -45,7 +47,7 @@ bool RTC_Init(void)
         }
         //如果LSE配置后超过2.5s仍然不正常，则认为LSE晶振不工作了，返回0失败。
         if(u8LSECfgDealy >= 250)
-            return 1;
+            return 1;  
 
         //设置RTC时钟源RTCCLK为LSE
         RCC_RTCCLKConfig(RCC_RTCCLKSource_LSE);
@@ -55,16 +57,19 @@ bool RTC_Init(void)
         //等待上一次对RTC寄存器的写操作完成。
         RTC_WaitForLastTask();
 
-        //由于需要对RTC_CRH 寄存器读以便设置秒中断，所以需要等待RTC寄存器同步完成
+        //由于需要对RTC_CRH 寄存器读以便设置秒中断，所以需要等待RTC寄存器同步完成.
+        //一次同步后，以后就可以随时读取了，不必每次读时都同步。
         RTC_WaitForSynchro();
-        //使能RTC秒中断
-        RTC_ITConfig(RTC_IT_SEC, ENABLE);
-        RTC_WaitForLastTask();
+        
+        //使能RTC秒中断。
+        //RTC_ITConfig(RTC_IT_SEC, ENABLE);
+        //RTC_WaitForLastTask();
 
         //设置RTC预分频值
         RTC_SetPrescaler(32767);
         RTC_WaitForLastTask();
 
+        //设置RTC初始化时间，可以不用在此设置。
         dtStruct dt; //日期时间结构变量。
         //以编程时的日期时间为验证。
         dt.u16Year = 2018;
@@ -73,13 +78,16 @@ bool RTC_Init(void)
         dt.u16Hour = 19;
         dt.u16Min = 40;
         dt.u16Sec = 0;
-        RTC_SetCounter(Dt2Sec(&dt));
-        RTC_WaitForLastTask();
+        Set_RTC(&dt);        
+        RTC_WaitForLastTask(); 
 
         //向后备寄存器中的DR1写入标识数据，标志已经对RTC进行了配置。
-        BKP_WriteBackupRegister(BKP_DR1, 0x5050);
+        BKP_WriteBackupRegister(BKP_DR1, 0x5051);
     }
-    else{
+    //可以不用else，无论是否已经配置LSE、RTC预分频值都执行配置RTC中断。
+    //因为中断配置数据不在BKP中也不在RTC核心里面。
+    //else
+        {
         RTC_WaitForSynchro();
         RTC_ITConfig(RTC_IT_SEC, ENABLE);
         RTC_WaitForLastTask();
@@ -105,14 +113,15 @@ void RTC_IRQHandler(void)
        //获取时钟。
        uint32_t u32Sec = RTC_GetCounter();
        Sec2Dt(u32Sec, &Calendar);
-        printf("当前日期时间 %d-%d-%d %d:%d:%d\n", Calendar.u16Year, Calendar.u16Mon, Calendar.u16Day, Calendar.u16Hour, Calendar.u16Min, Calendar.u16Sec);
+       printf("当前日期时间 %d-%d-%d %d:%d:%d\n", Calendar.u16Year, Calendar.u16Mon, Calendar.u16Day, Calendar.u16Hour, Calendar.u16Min, Calendar.u16Sec);
     }
 
     //闹钟中断
-    if(RTC_GetITStatus(RTC_IT_ALR) == SET)
-    {
+    //闹钟中断有单独的服务函数。
+//    if(RTC_GetITStatus(RTC_IT_ALR) == SET)
+//    {
 
-    }
+//    }
     RTC_ClearITPendingBit(RTC_IT_SEC | RTC_IT_OW);
     RTC_WaitForLastTask();
 }
@@ -225,4 +234,85 @@ void Sec2Dt(uint32_t u32Sec, dtStruct* dt)
     dt->u16Hour = (int)(u32Sec_Day / 3600);
     dt->u16Min =  (int)((u32Sec_Day % 3600) / 60);
     dt->u16Sec =  (int)((u32Sec_Day % 3600) % 60);
+}
+
+//设置RTC时间
+//调用Dt2Sec()把日期时间转换为日历时间，然后写入RTC的CNT。
+//函数内对dt内容进行判断，需要1970-1-1至2105-12-31之间的日期。
+//写入正确返回0，否则返回非零错误码。
+//函数不改变dt内容。
+bool Set_RTC(dtStruct *dt)
+{
+    uint16_t u16Day_Lim;
+    //判断dt所指内容的合法性。
+    if(dt->u16Mon == 1 || dt->u16Mon == 3 || dt->u16Mon == 5 || dt->u16Mon == 7 || dt->u16Mon == 8 || dt->u16Mon ==10 || dt->u16Mon == 12)
+        u16Day_Lim = 31;
+    else
+        u16Day_Lim = 30;
+
+    if(dt->u16Mon == 2 && (Is_LeapYear(dt->u16Year)))
+        u16Day_Lim = 29;
+    if(dt->u16Mon == 2 && (!Is_LeapYear(dt->u16Year)))
+        u16Day_Lim = 28;
+
+    if(!((dt->u16Year >= 1970 && dt->u16Year <= 2105) &&
+                 (dt->u16Mon >=1 && dt->u16Mon <= 12) &&
+                 (dt->u16Day >= 1 && dt->u16Day <= u16Day_Lim)))    
+                return 1; //输入的日期错误。
+    if(!(dt->u16Hour >= 0 && dt->u16Hour <= 23) &&
+          (dt->u16Min >= 0 && dt->u16Min <= 59) &&
+          (dt->u16Sec >= 0 && dt->u16Sec <= 59))
+                return 2; //输入的时间错误。
+
+    //输入的日期时间正确。
+    //使能PWR和BKP外设。
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR | RCC_APB1Periph_BKP, ENABLE);
+    //使能对RTC和后备寄存器的写访问。
+    PWR_BackupAccessCmd(ENABLE);
+
+    //计算日期时间对应的日历时间秒数后写入RTC_CNT。
+    RTC_SetCounter(Dt2Sec(dt));
+    //等待对RTC寄存器的写操作完成。
+    RTC_WaitForLastTask();
+
+    return 0;
+}
+
+//设置RTC的闹钟时间。
+//基本用法同Set_RTC()，只不过写入的寄存器不同。
+bool Set_Alarm(dtStruct *dt)
+{
+    uint16_t u16Day_Lim;
+    //判断dt所指内容的合法性。
+    if(dt->u16Mon == 1 || dt->u16Mon == 3 || dt->u16Mon == 5 || dt->u16Mon == 7 || dt->u16Mon == 8 || dt->u16Mon ==10 || dt->u16Mon == 12)
+        u16Day_Lim = 31;
+    else
+        u16Day_Lim = 30;
+
+    if(dt->u16Mon == 2 && (Is_LeapYear(dt->u16Year)))
+        u16Day_Lim = 29;
+    if(dt->u16Mon == 2 && (!Is_LeapYear(dt->u16Year)))
+        u16Day_Lim = 28;
+
+    if(!((dt->u16Year >= 1970 && dt->u16Year <= 2105) &&
+                 (dt->u16Mon >=1 && dt->u16Mon <= 12) &&
+                 (dt->u16Day >= 1 && dt->u16Day <= u16Day_Lim)))
+        return 1; //输入的日期错误。
+    if(!(dt->u16Hour >= 0 && dt->u16Hour <= 23) &&
+          (dt->u16Min >= 0 && dt->u16Min <= 59) &&
+          (dt->u16Sec >= 0 && dt->u16Sec <= 59))
+        return 2; //输入的时间错误。
+
+    //输入的日期时间正确。
+    //使能PWR和BKP外设。
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_PWR | RCC_APB1Periph_BKP, ENABLE);
+    //使能对RTC和后备寄存器的写访问。
+    PWR_BackupAccessCmd(ENABLE);
+
+    //计算日期时间对应的日历时间秒数后写入RTC_CNT。
+    RTC_SetAlarm(Dt2Sec(dt));
+    //等待对RTC寄存器的写操作完成。
+    RTC_WaitForLastTask();
+
+    return 0;
 }
