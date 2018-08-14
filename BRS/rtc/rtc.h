@@ -19,6 +19,7 @@ typedef struct {
     uint16_t u16Min;
     uint16_t u16Sec;
 }dtStruct;
+extern dtStruct Calendar;
 
 //闰年判断
 //如果年份能被4整除 且 不能被100整除但年份可以被400整除，则为闰年。

@@ -86,12 +86,10 @@ bool RTC_Init(void)
     }
     //可以不用else，无论是否已经配置LSE、RTC预分频值都执行配置RTC中断。
     //因为中断配置数据不在BKP中也不在RTC核心里面。
-    //else
-        {
-        RTC_WaitForSynchro();
-        RTC_ITConfig(RTC_IT_SEC, ENABLE);
-        RTC_WaitForLastTask();
-    }
+
+    RTC_WaitForSynchro();
+    RTC_ITConfig(RTC_IT_SEC, ENABLE);
+    RTC_WaitForLastTask();
 
     //RTC中断优先级设置
     NVIC_InitTypeDef NVIC_InitStruct;
@@ -112,8 +110,7 @@ void RTC_IRQHandler(void)
     {
        //获取时钟。
        uint32_t u32Sec = RTC_GetCounter();
-       Sec2Dt(u32Sec, &Calendar);
-       printf("当前日期时间 %d-%d-%d %d:%d:%d\n", Calendar.u16Year, Calendar.u16Mon, Calendar.u16Day, Calendar.u16Hour, Calendar.u16Min, Calendar.u16Sec);
+       Sec2Dt(u32Sec, &Calendar);       
     }
 
     //闹钟中断
@@ -239,7 +236,7 @@ void Sec2Dt(uint32_t u32Sec, dtStruct* dt)
 //设置RTC时间
 //调用Dt2Sec()把日期时间转换为日历时间，然后写入RTC的CNT。
 //函数内对dt内容进行判断，需要1970-1-1至2105-12-31之间的日期。
-//写入正确返回0，否则返回非零错误码。
+//写入正确返回TRUE，否则返回FALSE。
 //函数不改变dt内容。
 bool Set_RTC(dtStruct *dt)
 {
@@ -258,11 +255,11 @@ bool Set_RTC(dtStruct *dt)
     if(!((dt->u16Year >= 1970 && dt->u16Year <= 2105) &&
                  (dt->u16Mon >=1 && dt->u16Mon <= 12) &&
                  (dt->u16Day >= 1 && dt->u16Day <= u16Day_Lim)))    
-                return 1; //输入的日期错误。
+                return FALSE; //输入的日期错误。
     if(!(dt->u16Hour >= 0 && dt->u16Hour <= 23) &&
           (dt->u16Min >= 0 && dt->u16Min <= 59) &&
           (dt->u16Sec >= 0 && dt->u16Sec <= 59))
-                return 2; //输入的时间错误。
+                return FALSE; //输入的时间错误。
 
     //输入的日期时间正确。
     //使能PWR和BKP外设。
@@ -275,7 +272,7 @@ bool Set_RTC(dtStruct *dt)
     //等待对RTC寄存器的写操作完成。
     RTC_WaitForLastTask();
 
-    return 0;
+    return TRUE;
 }
 
 //设置RTC的闹钟时间。
@@ -297,11 +294,11 @@ bool Set_Alarm(dtStruct *dt)
     if(!((dt->u16Year >= 1970 && dt->u16Year <= 2105) &&
                  (dt->u16Mon >=1 && dt->u16Mon <= 12) &&
                  (dt->u16Day >= 1 && dt->u16Day <= u16Day_Lim)))
-        return 1; //输入的日期错误。
+        return FALSE; //输入的日期错误。
     if(!(dt->u16Hour >= 0 && dt->u16Hour <= 23) &&
           (dt->u16Min >= 0 && dt->u16Min <= 59) &&
           (dt->u16Sec >= 0 && dt->u16Sec <= 59))
-        return 2; //输入的时间错误。
+        return FALSE; //输入的时间错误。
 
     //输入的日期时间正确。
     //使能PWR和BKP外设。
@@ -314,5 +311,5 @@ bool Set_Alarm(dtStruct *dt)
     //等待对RTC寄存器的写操作完成。
     RTC_WaitForLastTask();
 
-    return 0;
+    return TRUE;
 }
