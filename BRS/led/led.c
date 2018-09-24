@@ -12,7 +12,7 @@
 //板载led初始化。
 void led_Init(void)
 {
-    GPIO_InitTypeDef GPIO_InitStruct; //声明初始化数据结构。
+    //GPIO_InitTypeDef GPIO_InitStruct; //声明初始化数据结构。
 
     //GPIOB和GPIOE时钟使能。
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
